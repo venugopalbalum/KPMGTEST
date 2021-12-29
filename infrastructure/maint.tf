@@ -5,6 +5,11 @@ provider   "azurerm"   {
  }
 # Creater resource group
 resource   "azurerm_resource_group"   "rg"   { 
-   name   =   "my-first-terraform-rg" 
+   name   =   "test-terraform-rg" 
    location   =   "eastus" 
+   account_tier = "Standard"
+   
+   tags = {
+        environment = "Terraform Test"
+    }
  }

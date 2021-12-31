@@ -1,1 +1,77 @@
+pipeline {
+/* Provide agent details where ur tf script will execute */
+    agent any
+//Define params to be used
+    parameters {
+        string(name: 'environment', defaultValue: 'test', description: 'environment file to use for deployment')
+        
+    }
+    //azure_service_principal secret is created in jenkins ui to use it in script
+	  stage('Terraform Init'){
 
+      options {
+              azureKeyVault(
+                credentialID: "azure_service_principal",
+               
+              )
+      }
+
+      steps {
+            ansiColor('xterm') {
+            withCredentials([azureServicePrincipal(
+            credentialsId: 'azure_service_principal',
+            subscriptionIdVariable: 'SUBSCRIPTION_ID',
+            clientIdVariable: 'CLIENT_ID',
+            clientSecretVariable: 'CLIENT_SECRET',
+            tenantIdVariable: 'TENANT_ID'
+            )]) {
+                 dir("src") {
+                 sh """
+                 echo "Initialising Terraform"
+                 terraform init -input=false
+                 """
+                }
+             }
+          }
+       }
+    }
+       
+    
+    stages {
+        stage('Plan') {
+            steps {
+                script {
+                    currentBuild.displayName = params.version
+                }
+                sh "terraform plan -input=false -out tfplan -var --var-file=environments/${params.environment}.tfvars "
+                sh 'terraform show -no-color tfplan > tfplan.txt'
+            }
+        }
+
+        stage('Approval') {
+            
+            steps {
+                timeout(time: 30, unit: 'MINUTES') {
+                    input (message: "Deploy the infrastructure?")
+                } 
+                script {
+                    def plan = readFile 'tfplan.txt'
+                    input message: "Do you want to apply the plan?",
+                        parameters: [text(name: 'Plan', description: 'Please review the plan', defaultValue: plan)]
+                }
+            }
+        }
+
+        stage('Apply') {
+            steps {
+                sh "terraform apply -input=false tfplan"
+            }
+        }
+    }
+
+    post {
+        always {
+            archiveArtifacts artifacts: 'tfplan.txt'
+        }
+    }
+}
